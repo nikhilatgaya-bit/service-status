@@ -26,7 +26,14 @@
   .stage { font-size:18px; font-weight:700; margin:0 0 4px; }
   .stage.ok { color:var(--ok); } .stage.warn { color:var(--warn); } .stage.wait { color:var(--accent); }
   .sub { color:var(--muted); font-size:14px; margin:0 0 14px; }
-  .meta { font-size:14px; color:var(--muted); margin-bottom:12px; }
+  .or { display:flex; align-items:center; gap:10px; color:var(--muted); font-size:13px; font-weight:600; margin:-4px 0 10px; }
+  .or::before, .or::after { content:""; flex:1; height:1px; background:var(--line); }
+  .hint { color:var(--muted); font-size:13px; margin:-8px 0 14px; }
+  .req { color:var(--bad); }
+  dl.det { display:grid; grid-template-columns:auto 1fr; gap:6px 14px; margin:0 0 16px; padding:12px 14px; background:#f7f9fc; border:1px solid var(--line); border-radius:8px; font-size:14px; }
+  dl.det dt { color:var(--muted); }
+  dl.det dd { margin:0; font-weight:600; word-break:break-all; }
+  .count { color:var(--muted); font-size:14px; margin:0 0 10px; }
   ol.tl { list-style:none; margin:0; padding:0; }
   ol.tl li { position:relative; padding:0 0 16px 28px; }
   ol.tl li::before { content:""; position:absolute; left:6px; top:5px; width:12px; height:12px; border-radius:50%; background:var(--accent); }
@@ -52,18 +59,17 @@
   <form class="card" id="form" autocomplete="on">
     <label for="job" data-t="job"></label>
     <input id="job" name="job" inputmode="text" autocapitalize="characters" placeholder="SR_1234">
-    <label for="mobile" data-t="mobile"></label>
+    <div class="or" data-t="or"></div>
+    <label for="serial" data-t="serial"></label>
+    <input id="serial" name="serial" inputmode="text" autocapitalize="characters" autocomplete="off" placeholder="">
+    <p class="hint" data-t="hint"></p>
+    <label for="mobile"><span data-t="mobile"></span> <span class="req">*</span></label>
     <input id="mobile" name="mobile" type="tel" inputmode="numeric" maxlength="14" placeholder="98XXXXXXXX">
     <div class="msg bad hidden" id="err"></div>
     <button class="go" id="go" type="submit" data-t="check"></button>
   </form>
 
-  <div class="card hidden" id="result">
-    <p class="stage" id="stage"></p>
-    <p class="sub" id="stageSub"></p>
-    <div class="meta" id="meta"></div>
-    <ol class="tl" id="timeline"></ol>
-  </div>
+  <div class="hidden" id="result"></div>
 
   <p class="help hidden" id="help"><span data-t="help"></span> <a id="phone" href="#"></a></p>
 </div>
@@ -73,11 +79,15 @@ var LOOKUP_URL = 'https://script.google.com/macros/s/AKfycbwwxFvFelBGOpDmXjIxTw4
 
 var T = {
   en: {
-    title: 'Claim Status', job: 'Job ID', mobile: 'Registered mobile number', check: 'Check status', checking: 'Checking…',
-    help: 'For help, call', jobLine: 'Job', model: 'Battery',
+    title: 'Claim Status', job: 'Job ID', serial: 'Claim battery serial number', or: 'OR', mobile: 'Registered mobile number', check: 'Check status', checking: 'Checking…',
+    hint: 'Enter the Job ID from your slip, or the serial number of the battery you gave for claim.',
+    help: 'For help, call', d_job: 'Job ID', d_date: 'Claim date', d_brand: 'Brand', d_model: 'Battery model', d_serial: 'Battery serial no.', d_status: 'Current status',
+    found: 'Claims found for this battery: ',
+    e_need: 'Please enter the Job ID or the claim battery serial number.',
+    e_serial: 'Please enter the full serial number printed on the battery.',
     e_format: 'Please enter the Job ID as printed on your slip, for example SR_1234.',
     e_mobile: 'Please enter the 10-digit mobile number given at the counter.',
-    e_nomatch: 'Job ID and mobile number do not match.', e_left: 'Tries left: ',
+    e_nomatch: 'No claim found for these details. Please check the Job ID / serial number and mobile number.', e_left: 'Tries left: ',
     e_locked: 'Too many wrong tries. Please try again after one hour.',
     e_server: 'Could not check right now. Please try again in a minute.',
     s_received: 'Claim received', s_stock: 'Replacement battery given', s_sent: 'Sent to company',
@@ -94,11 +104,15 @@ var T = {
     g_rejectedDone: 'Claim not accepted', g_rejectedDoneSub: 'The battery has been returned to the customer.'
   },
   hi: {
-    title: 'क्लेम की स्थिति', job: 'जॉब आईडी', mobile: 'पंजीकृत मोबाइल नंबर', check: 'स्थिति देखें', checking: 'जाँच हो रही है…',
-    help: 'सहायता के लिए कॉल करें', jobLine: 'जॉब', model: 'बैटरी',
+    title: 'क्लेम की स्थिति', job: 'जॉब आईडी', serial: 'क्लेम बैटरी का सीरियल नंबर', or: 'या', mobile: 'पंजीकृत मोबाइल नंबर', check: 'स्थिति देखें', checking: 'जाँच हो रही है…',
+    hint: 'पर्ची पर लिखी जॉब आईडी डालें, या क्लेम में दी गई बैटरी का सीरियल नंबर डालें।',
+    help: 'सहायता के लिए कॉल करें', d_job: 'जॉब आईडी', d_date: 'क्लेम की तारीख', d_brand: 'ब्रांड', d_model: 'बैटरी मॉडल', d_serial: 'बैटरी सीरियल नंबर', d_status: 'वर्तमान स्थिति',
+    found: 'इस बैटरी के मिले क्लेम: ',
+    e_need: 'कृपया जॉब आईडी या क्लेम बैटरी का सीरियल नंबर डालें।',
+    e_serial: 'कृपया बैटरी पर छपा पूरा सीरियल नंबर डालें।',
     e_format: 'कृपया पर्ची पर छपी जॉब आईडी लिखें, जैसे SR_1234।',
     e_mobile: 'कृपया काउंटर पर दिया गया 10 अंकों का मोबाइल नंबर लिखें।',
-    e_nomatch: 'जॉब आईडी और मोबाइल नंबर मेल नहीं खाते।', e_left: 'बचे हुए प्रयास: ',
+    e_nomatch: 'इन विवरणों से कोई क्लेम नहीं मिला। कृपया जॉब आईडी / सीरियल नंबर और मोबाइल नंबर जाँचें।', e_left: 'बचे हुए प्रयास: ',
     e_locked: 'बहुत अधिक गलत प्रयास। कृपया एक घंटे बाद फिर से प्रयास करें।',
     e_server: 'अभी स्थिति नहीं देखी जा सकी। कृपया एक मिनट बाद फिर से प्रयास करें।',
     s_received: 'क्लेम प्राप्त हुआ', s_stock: 'बदले में बैटरी दी गई', s_sent: 'कंपनी को भेजा गया',
@@ -140,26 +154,44 @@ function showError(code, left) {
 }
 function clearError() { lastErr = null; $('err').classList.add('hidden'); }
 
+function el(tag, cls, text) {
+  var x = document.createElement(tag);
+  if (cls) x.className = cls;
+  if (text !== undefined && text !== null) x.textContent = text;
+  return x;
+}
+
+function claimCard(c) {
+  var g = c.stage || 'checking';
+  var card = el('div', 'card');
+  card.appendChild(el('p', 'stage ' + (STAGE_TONE[g] || 'wait'), t('g_' + g)));
+  card.appendChild(el('p', 'sub', t('g_' + g + 'Sub')));
+  var dl = el('dl', 'det');
+  [['d_job', c.job], ['d_date', c.claimDate], ['d_brand', c.brand], ['d_model', c.model], ['d_serial', c.serial], ['d_status', t('g_' + g)]].forEach(function (p) {
+    if (!p[1]) return;
+    dl.appendChild(el('dt', '', t(p[0])));
+    dl.appendChild(el('dd', '', p[1]));
+  });
+  card.appendChild(dl);
+  var ol = el('ol', 'tl');
+  (c.steps || []).forEach(function (s, i, all) {
+    var li = el('li', i === all.length - 1 ? 'last' : '');
+    li.appendChild(el('div', 'tl-t', t('s_' + s.key)));
+    li.appendChild(el('div', 'tl-d', s.date || ''));
+    ol.appendChild(li);
+  });
+  card.appendChild(ol);
+  return card;
+}
+
 function showResult(r) {
   last = r;
-  var g = r.stage || 'checking';
-  $('stage').textContent = t('g_' + g);
-  $('stage').className = 'stage ' + (STAGE_TONE[g] || 'wait');
-  $('stageSub').textContent = t('g_' + g + 'Sub');
-  var meta = t('jobLine') + ': ' + r.job;
-  var model = [r.brand, r.model].filter(Boolean).join(' ');
-  if (model) meta += ' · ' + t('model') + ': ' + model;
-  $('meta').textContent = meta;
-  var ol = $('timeline');
-  ol.innerHTML = '';
-  (r.steps || []).forEach(function (s, i, all) {
-    var li = document.createElement('li');
-    if (i === all.length - 1) li.className = 'last';
-    var a = document.createElement('div'); a.className = 'tl-t'; a.textContent = t('s_' + s.key);
-    var b = document.createElement('div'); b.className = 'tl-d'; b.textContent = s.date || '';
-    li.appendChild(a); li.appendChild(b); ol.appendChild(li);
-  });
-  $('result').classList.remove('hidden');
+  var list = r.results || [r];
+  var box = $('result');
+  box.innerHTML = '';
+  if (list.length > 1) box.appendChild(el('p', 'count', t('found') + list.length));
+  list.forEach(function (c) { box.appendChild(claimCard(c)); });
+  box.classList.remove('hidden');
 }
 
 function api(params) {
@@ -172,14 +204,21 @@ function check(ev) {
   if (ev) ev.preventDefault();
   clearError();
   var job = $('job').value.trim().toUpperCase().replace(/\s+/g, '');
+  var serial = $('serial').value.trim().toUpperCase();
   var mob = $('mobile').value.replace(/\D/g, '');
   if (/^\d+$/.test(job)) job = 'SR_' + job;
   $('job').value = job;
-  if (!/^SR_\d{1,7}$/.test(job)) { showError('format'); return; }
+  $('serial').value = serial;
+  if (!job && !serial) { showError('need'); return; }
+  if (job && !/^SR_\d{1,7}$/.test(job)) { showError('format'); return; }
+  if (serial && serial.replace(/[^A-Z0-9]/g, '').length < 4) { showError('serial'); return; }
   if (mob.length < 10) { showError('mobile'); return; }
   $('go').disabled = true; $('go').textContent = t('checking');
   $('result').classList.add('hidden'); last = null;
-  api({ job: job, mobile: mob }).then(function (r) {
+  var q = { mobile: mob };
+  if (job) q.job = job;
+  if (serial) q.serial = serial;
+  api(q).then(function (r) {
     if (r && r.ok) showResult(r); else showError((r && r.error) || 'server', r && r.left);
   }).catch(function () { showError('server'); })
     .then(function () { $('go').disabled = false; $('go').textContent = t('check'); });
@@ -201,7 +240,8 @@ $('form').addEventListener('submit', check);
   var qs = new URLSearchParams(location.search);
   setLang(qs.get('lang') || saved || 'en');
   if (qs.get('job')) $('job').value = qs.get('job').toUpperCase();
-  (qs.get('job') ? $('mobile') : $('job')).focus();
+  if (qs.get('serial')) $('serial').value = qs.get('serial').toUpperCase();
+  (qs.get('job') || qs.get('serial') ? $('mobile') : $('job')).focus();
   loadShop();
 })();
 </script>
