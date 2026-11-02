@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claim Status</title>
+<style>
+  :root { --ink:#1d2433; --muted:#5d6676; --line:#dfe3ea; --bg:#f4f6f9; --card:#fff; --accent:#1f5fae; --ok:#1d7a46; --warn:#b4570b; --bad:#b42318; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans Devanagari",sans-serif; background:var(--bg); color:var(--ink); }
+  .wrap { max-width:520px; margin:0 auto; padding:16px; }
+  header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:8px 0 16px; }
+  h1 { font-size:20px; margin:0; }
+  .shop { color:var(--muted); font-size:14px; margin-top:2px; }
+  .lang { display:flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; flex:none; }
+  .lang button { border:0; background:#fff; padding:7px 12px; font-size:14px; cursor:pointer; color:var(--ink); }
+  .lang button.on { background:var(--accent); color:#fff; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:14px; }
+  label { display:block; font-size:14px; font-weight:600; margin:0 0 6px; }
+  input { width:100%; font-size:17px; padding:11px 12px; border:1px solid #c5ccd8; border-radius:8px; margin-bottom:14px; }
+  input:focus { outline:2px solid var(--accent); border-color:transparent; }
+  .go { width:100%; font-size:17px; padding:12px; border:0; border-radius:8px; background:var(--accent); color:#fff; font-weight:600; cursor:pointer; }
+  .go:disabled { opacity:.6; cursor:default; }
+  .msg { padding:12px 14px; border-radius:8px; font-size:15px; margin-bottom:14px; }
+  .msg.bad { background:#fdecea; color:var(--bad); }
+  .stage { font-size:18px; font-weight:700; margin:0 0 4px; }
+  .stage.ok { color:var(--ok); } .stage.warn { color:var(--warn); } .stage.wait { color:var(--accent); }
+  .sub { color:var(--muted); font-size:14px; margin:0 0 14px; }
+  .meta { font-size:14px; color:var(--muted); margin-bottom:12px; }
+  ol.tl { list-style:none; margin:0; padding:0; }
+  ol.tl li { position:relative; padding:0 0 16px 28px; }
+  ol.tl li::before { content:""; position:absolute; left:6px; top:5px; width:12px; height:12px; border-radius:50%; background:var(--accent); }
+  ol.tl li::after { content:""; position:absolute; left:11px; top:19px; bottom:0; width:2px; background:var(--line); }
+  ol.tl li:last-child { padding-bottom:0; } ol.tl li:last-child::after { display:none; }
+  ol.tl li.last::before { background:var(--ok); box-shadow:0 0 0 4px #d8efe1; }
+  .tl-t { font-weight:600; font-size:15px; } .tl-d { color:var(--muted); font-size:13px; }
+  .help { text-align:center; font-size:15px; color:var(--muted); }
+  .help a { color:var(--accent); font-weight:600; text-decoration:none; }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div><h1 data-t="title"></h1><div class="shop" id="shopName"></div></div>
+    <div class="lang" role="group" aria-label="Language">
+      <button type="button" data-lang="en">English</button>
+      <button type="button" data-lang="hi">हिन्दी</button>
+    </div>
+  </header>
+
+  <form class="card" id="form" autocomplete="on">
+    <label for="job" data-t="job"></label>
+    <input id="job" name="job" inputmode="text" autocapitalize="characters" placeholder="SR_1234">
+    <label for="mobile" data-t="mobile"></label>
+    <input id="mobile" name="mobile" type="tel" inputmode="numeric" maxlength="14" placeholder="98XXXXXXXX">
+    <div class="msg bad hidden" id="err"></div>
+    <button class="go" id="go" type="submit" data-t="check"></button>
+  </form>
+
+  <div class="card hidden" id="result">
+    <p class="stage" id="stage"></p>
+    <p class="sub" id="stageSub"></p>
+    <div class="meta" id="meta"></div>
+    <ol class="tl" id="timeline"></ol>
+  </div>
+
+  <p class="help hidden" id="help"><span data-t="help"></span> <a id="phone" href="#"></a></p>
+</div>
+
+<script>
+var LOOKUP_URL = 'PASTE_THE_STATUS_LOOKUP_WEB_APP_URL_HERE';
+
+var T = {
+  en: {
+    title: 'Claim Status', job: 'Job ID', mobile: 'Registered mobile number', check: 'Check status', checking: 'Checking…',
+    help: 'For help, call', jobLine: 'Job', model: 'Battery',
+    e_format: 'Please enter the Job ID as printed on your slip, for example SR_1234.',
+    e_mobile: 'Please enter the 10-digit mobile number given at the counter.',
+    e_nomatch: 'Job ID and mobile number do not match.', e_left: 'Tries left: ',
+    e_locked: 'Too many wrong tries. Please try again after one hour.',
+    e_server: 'Could not check right now. Please try again in a minute.',
+    s_received: 'Claim received', s_stock: 'Replacement battery given', s_sent: 'Sent to company',
+    s_back: 'Battery received from company', s_ready: 'Ready for pickup', s_collected: 'Handed over to customer',
+    s_rejected: 'Claim not accepted by company',
+    g_checking: 'Under checking', g_checkingSub: 'Your battery is being checked at our service centre.',
+    g_stockHere: 'Replacement given', g_stockHereSub: 'You have received a replacement battery. Your old battery will be sent to the company.',
+    g_stockSent: 'Replacement given', g_stockSentSub: 'You have received a replacement battery. Your old battery has been sent to the company.',
+    g_atCompany: 'At company', g_atCompanySub: 'Your battery has been sent to the company. We will inform you when it comes back.',
+    g_readyPickup: 'Ready for pickup', g_readyPickupSub: 'Please visit our service centre with your slip to collect your battery.',
+    g_collected: 'Completed', g_collectedSub: 'Your battery has been handed over. Thank you.',
+    g_done: 'Completed', g_doneSub: 'This claim is complete. Thank you.',
+    g_rejectedCollect: 'Claim not accepted – please collect your battery', g_rejectedCollectSub: 'The company did not accept this claim. Please visit us with your slip to collect your battery.',
+    g_rejectedDone: 'Claim not accepted', g_rejectedDoneSub: 'The battery has been returned to the customer.'
+  },
+  hi: {
+    title: 'क्लेम की स्थिति', job: 'जॉब आईडी', mobile: 'पंजीकृत मोबाइल नंबर', check: 'स्थिति देखें', checking: 'जाँच हो रही है…',
+    help: 'सहायता के लिए कॉल करें', jobLine: 'जॉब', model: 'बैटरी',
+    e_format: 'कृपया पर्ची पर छपी जॉब आईडी लिखें, जैसे SR_1234।',
+    e_mobile: 'कृपया काउंटर पर दिया गया 10 अंकों का मोबाइल नंबर लिखें।',
+    e_nomatch: 'जॉब आईडी और मोबाइल नंबर मेल नहीं खाते।', e_left: 'बचे हुए प्रयास: ',
+    e_locked: 'बहुत अधिक गलत प्रयास। कृपया एक घंटे बाद फिर से प्रयास करें।',
+    e_server: 'अभी स्थिति नहीं देखी जा सकी। कृपया एक मिनट बाद फिर से प्रयास करें।',
+    s_received: 'क्लेम प्राप्त हुआ', s_stock: 'बदले में बैटरी दी गई', s_sent: 'कंपनी को भेजा गया',
+    s_back: 'कंपनी से बैटरी प्राप्त हुई', s_ready: 'ले जाने के लिए तैयार', s_collected: 'बैटरी ग्राहक को सौंप दी गई',
+    s_rejected: 'कंपनी ने क्लेम स्वीकार नहीं किया',
+    g_checking: 'जाँच चल रही है', g_checkingSub: 'आपकी बैटरी की जाँच हमारे सर्विस सेंटर पर हो रही है।',
+    g_stockHere: 'बदले में बैटरी दी गई', g_stockHereSub: 'आपको बदले में बैटरी मिल चुकी है। आपकी पुरानी बैटरी कंपनी को भेजी जाएगी।',
+    g_stockSent: 'बदले में बैटरी दी गई', g_stockSentSub: 'आपको बदले में बैटरी मिल चुकी है। आपकी पुरानी बैटरी कंपनी को भेज दी गई है।',
+    g_atCompany: 'कंपनी में', g_atCompanySub: 'आपकी बैटरी कंपनी को भेजी गई है। वापस आने पर हम आपको सूचित करेंगे।',
+    g_readyPickup: 'ले जाने के लिए तैयार', g_readyPickupSub: 'कृपया अपनी पर्ची के साथ सर्विस सेंटर आकर अपनी बैटरी ले जाएँ।',
+    g_collected: 'पूरा हुआ', g_collectedSub: 'आपकी बैटरी आपको सौंप दी गई है। धन्यवाद।',
+    g_done: 'पूरा हुआ', g_doneSub: 'यह क्लेम पूरा हो गया है। धन्यवाद।',
+    g_rejectedCollect: 'क्लेम अस्वीकार हुआ – कृपया अपनी बैटरी ले जाएँ', g_rejectedCollectSub: 'कंपनी ने यह क्लेम स्वीकार नहीं किया। कृपया पर्ची के साथ आकर अपनी बैटरी ले जाएँ।',
+    g_rejectedDone: 'क्लेम अस्वीकार हुआ', g_rejectedDoneSub: 'बैटरी ग्राहक को लौटा दी गई है।'
+  }
+};
+var STAGE_TONE = { checking:'wait', stockHere:'ok', stockSent:'ok', atCompany:'wait', readyPickup:'ok', collected:'ok', done:'ok', rejectedCollect:'warn', rejectedDone:'warn' };
+
+var lang = 'en', last = null, lastErr = null;
+function $(id) { return document.getElementById(id); }
+function t(k) { return (T[lang] && T[lang][k]) || T.en[k] || k; }
+
+function setLang(l) {
+  lang = T[l] ? l : 'en';
+  try { localStorage.setItem('statusLang', lang); } catch (e) {}
+  document.documentElement.lang = lang;
+  document.querySelectorAll('[data-lang]').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-lang') === lang); });
+  document.querySelectorAll('[data-t]').forEach(function (el) { el.textContent = t(el.getAttribute('data-t')); });
+  if (last) showResult(last);
+  if (lastErr) showError(lastErr.code, lastErr.left);
+}
+
+function showError(code, left) {
+  lastErr = { code: code, left: left };
+  var m = t('e_' + code);
+  if (code === 'nomatch' && left !== undefined && left !== null) m += ' ' + t('e_left') + left;
+  $('err').textContent = m;
+  $('err').classList.remove('hidden');
+}
+function clearError() { lastErr = null; $('err').classList.add('hidden'); }
+
+function showResult(r) {
+  last = r;
+  var g = r.stage || 'checking';
+  $('stage').textContent = t('g_' + g);
+  $('stage').className = 'stage ' + (STAGE_TONE[g] || 'wait');
+  $('stageSub').textContent = t('g_' + g + 'Sub');
+  var meta = t('jobLine') + ': ' + r.job;
+  var model = [r.brand, r.model].filter(Boolean).join(' ');
+  if (model) meta += ' · ' + t('model') + ': ' + model;
+  $('meta').textContent = meta;
+  var ol = $('timeline');
+  ol.innerHTML = '';
+  (r.steps || []).forEach(function (s, i, all) {
+    var li = document.createElement('li');
+    if (i === all.length - 1) li.className = 'last';
+    var a = document.createElement('div'); a.className = 'tl-t'; a.textContent = t('s_' + s.key);
+    var b = document.createElement('div'); b.className = 'tl-d'; b.textContent = s.date || '';
+    li.appendChild(a); li.appendChild(b); ol.appendChild(li);
+  });
+  $('result').classList.remove('hidden');
+}
+
+function api(params) {
+  var q = Object.keys(params).map(function (k) { return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]); }).join('&');
+  return fetch(LOOKUP_URL + (LOOKUP_URL.indexOf('?') < 0 ? '?' : '&') + q, { method: 'GET', redirect: 'follow' })
+    .then(function (res) { if (!res.ok) throw new Error('http'); return res.json(); });
+}
+
+function check(ev) {
+  if (ev) ev.preventDefault();
+  clearError();
+  var job = $('job').value.trim().toUpperCase().replace(/\s+/g, '');
+  var mob = $('mobile').value.replace(/\D/g, '');
+  if (/^\d+$/.test(job)) job = 'SR_' + job;
+  $('job').value = job;
+  if (!/^SR_\d{1,7}$/.test(job)) { showError('format'); return; }
+  if (mob.length < 10) { showError('mobile'); return; }
+  $('go').disabled = true; $('go').textContent = t('checking');
+  $('result').classList.add('hidden'); last = null;
+  api({ job: job, mobile: mob }).then(function (r) {
+    if (r && r.ok) showResult(r); else showError((r && r.error) || 'server', r && r.left);
+  }).catch(function () { showError('server'); })
+    .then(function () { $('go').disabled = false; $('go').textContent = t('check'); });
+}
+
+function loadShop() {
+  api({ info: 1 }).then(function (r) {
+    if (!r || !r.ok) return;
+    if (r.shopName) { $('shopName').textContent = r.shopName; document.title = r.shopName + ' – ' + t('title'); }
+    if (r.phone) { $('phone').textContent = r.phone; $('phone').href = 'tel:' + r.phone.replace(/[^\d+]/g, ''); $('help').classList.remove('hidden'); }
+  }).catch(function () {});
+}
+
+document.querySelectorAll('[data-lang]').forEach(function (b) { b.addEventListener('click', function () { setLang(b.getAttribute('data-lang')); }); });
+$('form').addEventListener('submit', check);
+(function init() {
+  var saved = null;
+  try { saved = localStorage.getItem('statusLang'); } catch (e) {}
+  var qs = new URLSearchParams(location.search);
+  setLang(qs.get('lang') || saved || 'en');
+  if (qs.get('job')) $('job').value = qs.get('job').toUpperCase();
+  (qs.get('job') ? $('mobile') : $('job')).focus();
+  loadShop();
+})();
+</script>
+</body>
+</html>
